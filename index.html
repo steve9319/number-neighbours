@@ -1,0 +1,1830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Number Neighbours</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔢</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Nunito','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:linear-gradient(135deg,#e0e7ff 0%,#fce7f3 50%,#fef3c7 100%);min-height:100vh}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:14px;font-weight:700;transition:transform .12s}
+button:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script>
+const {
+  useState,
+  useEffect,
+  useCallback,
+  useRef
+} = React;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  QUESTION BANK — 8 formats × numbers = 544 questions
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const FORMATS = [{
+  id: "after-standard",
+  label: "Just after (standard)",
+  direction: "after",
+  type: "standard",
+  difficulty: "easy",
+  template: n => `The number that comes just after ${n} is ___.`,
+  hint: n => `Count: ${n}, then ___`,
+  solve: n => n + 1,
+  explain: (n, a) => `${a} comes just after ${n}. One step to the right!`
+}, {
+  id: "after-reversed",
+  label: "Just after (reversed)",
+  direction: "after",
+  type: "reversed",
+  difficulty: "medium",
+  template: n => `The number that comes just after ___ is ${n}.`,
+  hint: n => `What number has ${n} right after it?`,
+  solve: n => n - 1,
+  explain: (n, a) => `${n} comes just after ${a}. So the blank is ${a}.`
+}, {
+  id: "after-given-first",
+  label: "Comes just after (given first)",
+  direction: "after",
+  type: "reversed",
+  difficulty: "medium",
+  template: n => `${n} comes just after ___.`,
+  hint: n => `${n} is one step to the right of ___`,
+  solve: n => n - 1,
+  explain: (n, a) => `${n} comes just after ${a}. The blank is ${a}.`
+}, {
+  id: "after-blank-first",
+  label: "Comes just after (blank first)",
+  direction: "after",
+  type: "standard",
+  difficulty: "easy",
+  template: n => `___ comes just after ${n}.`,
+  hint: n => `What is one step to the right of ${n}?`,
+  solve: n => n + 1,
+  explain: (n, a) => `${a} comes just after ${n}. One more than ${n}!`
+}, {
+  id: "before-standard",
+  label: "Just before (standard)",
+  direction: "before",
+  type: "standard",
+  difficulty: "easy",
+  template: n => `The number that comes just before ${n} is ___.`,
+  hint: n => `Count: ___ then ${n}`,
+  solve: n => n - 1,
+  explain: (n, a) => `${a} comes just before ${n}. One step to the left!`
+}, {
+  id: "before-reversed",
+  label: "Just before (reversed)",
+  direction: "before",
+  type: "reversed",
+  difficulty: "hard",
+  template: n => `The number that comes just before ___ is ${n}.`,
+  hint: n => `What number has ${n} right before it?`,
+  solve: n => n + 1,
+  explain: (n, a) => `${n} comes just before ${a}. So the blank is ${a}.`
+}, {
+  id: "before-given-first",
+  label: "Comes just before (given first)",
+  direction: "before",
+  type: "reversed",
+  difficulty: "hard",
+  template: n => `${n} comes just before ___.`,
+  hint: n => `${n} is one step to the left of ___`,
+  solve: n => n + 1,
+  explain: (n, a) => `${n} comes just before ${a}. The blank is ${a}.`
+}, {
+  id: "before-blank-first",
+  label: "Comes just before (blank first)",
+  direction: "before",
+  type: "standard",
+  difficulty: "easy",
+  template: n => `___ comes just before ${n}.`,
+  hint: n => `What is one step to the left of ${n}?`,
+  solve: n => n - 1,
+  explain: (n, a) => `${a} comes just before ${n}. One less than ${n}!`
+}];
+function buildPool() {
+  const pool = [];
+  const easy = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+  const med = [21, 22, 23, 25, 26, 27, 28, 30, 31, 33, 35, 36, 38, 40, 42, 44, 45, 47, 49, 50];
+  const hard = [51, 55, 59, 60, 63, 67, 70, 71, 75, 78, 80, 82, 85, 88, 90, 91, 95, 97, 99];
+  for (const f of FORMATS) {
+    for (const nums of [easy, med, hard]) {
+      const range = nums === easy ? "easy" : nums === med ? "medium" : "hard";
+      for (const n of nums) {
+        const a = f.solve(n);
+        if (a >= 1 && a <= 100) pool.push({
+          id: `${f.id}-${n}`,
+          formatId: f.id,
+          direction: f.direction,
+          questionType: f.type,
+          formatLabel: f.label,
+          range,
+          givenNumber: n,
+          answer: a,
+          text: f.template(n),
+          hint: f.hint(n),
+          explanation: f.explain(n, a)
+        });
+      }
+    }
+  }
+  return pool;
+}
+const POOL = buildPool();
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  DATABASE — Firebase Realtime DB REST API
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const DB = "https://number-neighbours-default-rtdb.firebaseio.com";
+async function dbGet(p) {
+  const r = await fetch(`${DB}/${p}.json`);
+  return r.json();
+}
+async function dbSet(p, d) {
+  await fetch(`${DB}/${p}.json`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(d)
+  });
+}
+async function dbPush(p, d) {
+  const r = await fetch(`${DB}/${p}.json`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(d)
+  });
+  return r.json();
+}
+async function dbUpdate(p, d) {
+  await fetch(`${DB}/${p}.json`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(d)
+  });
+}
+const AVATARS = ["🦊", "🐼", "🦋", "🐬", "🦄", "🐝", "🐸", "🦁", "🐧", "🐨"];
+async function getUsers() {
+  const d = await dbGet("users");
+  if (!d) return [];
+  return Object.entries(d).map(([id, v]) => ({
+    id,
+    ...v
+  }));
+}
+async function createUser(name) {
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
+  const avatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+  const data = {
+    name,
+    avatar,
+    createdAt: new Date().toISOString(),
+    totalQuizzes: 0,
+    totalQuestions: 0,
+    totalCorrect: 0
+  };
+  await dbSet(`users/${id}`, data);
+  return {
+    id,
+    ...data
+  };
+}
+async function getUserStats(uid) {
+  return dbGet(`users/${uid}`);
+}
+async function saveQuiz(uid, qd) {
+  const res = await dbPush(`users/${uid}/quizzes`, {
+    ...qd,
+    timestamp: new Date().toISOString()
+  });
+  const s = await getUserStats(uid);
+  if (s) await dbUpdate(`users/${uid}`, {
+    totalQuizzes: (s.totalQuizzes || 0) + 1,
+    totalQuestions: (s.totalQuestions || 0) + qd.total,
+    totalCorrect: (s.totalCorrect || 0) + qd.correct
+  });
+  return res.name;
+}
+async function getRecentQuizzes(uid, count = 10) {
+  const d = await dbGet(`users/${uid}/quizzes`);
+  if (!d) return [];
+  return Object.entries(d).map(([id, v]) => ({
+    id,
+    ...v
+  })).sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")).slice(0, count);
+}
+async function saveErrors(uid, qid, errors) {
+  for (const e of errors) await dbPush(`users/${uid}/errors`, {
+    ...e,
+    quizId: qid,
+    timestamp: new Date().toISOString()
+  });
+}
+async function getAllErrors(uid) {
+  const d = await dbGet(`users/${uid}/errors`);
+  if (!d) return [];
+  return Object.entries(d).map(([id, v]) => ({
+    id,
+    ...v
+  })).sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+}
+async function getErrorPatterns(uid) {
+  const errors = await getAllErrors(uid);
+  const p = {
+    total: errors.length,
+    byDirection: {
+      before: 0,
+      after: 0
+    },
+    byType: {
+      standard: 0,
+      reversed: 0
+    },
+    byFormat: {},
+    byRange: {
+      easy: 0,
+      medium: 0,
+      hard: 0
+    },
+    recentErrors: errors.slice(0, 30),
+    formatRanking: []
+  };
+  for (const e of errors) {
+    if (e.direction) p.byDirection[e.direction]++;
+    if (e.questionType) p.byType[e.questionType]++;
+    if (e.range) p.byRange[e.range]++;
+    const fid = e.formatId || "unknown";
+    if (!p.byFormat[fid]) p.byFormat[fid] = {
+      count: 0,
+      label: e.formatLabel || fid
+    };
+    p.byFormat[fid].count++;
+  }
+  p.formatRanking = Object.entries(p.byFormat).map(([id, v]) => ({
+    formatId: id,
+    ...v
+  })).sort((a, b) => b.count - a.count);
+  return p;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━
+//  QUIZ GENERATOR
+// ━━━━━━━━━━━━━━━━━━━━━━
+function shuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+function generateQuiz(count, difficulty, patterns) {
+  let ranges;
+  if (difficulty === "easy") ranges = ["easy"];else if (difficulty === "medium") ranges = ["easy", "medium"];else ranges = ["easy", "medium", "hard"];
+  let avail = POOL.filter(q => ranges.includes(q.range));
+  if (difficulty === "easy") avail = avail.filter(q => q.questionType === "standard");
+  const qs = [],
+    used = new Set();
+  if (patterns && patterns.total > 0 && patterns.formatRanking.length > 0) {
+    const rc = Math.floor(count * 0.4);
+    const wf = patterns.formatRanking.slice(0, 3).map(f => f.formatId);
+    let wp = shuffle(avail.filter(q => wf.includes(q.formatId)));
+    for (let i = 0; i < Math.min(rc, wp.length); i++) {
+      if (!used.has(wp[i].id)) {
+        qs.push({
+          ...wp[i],
+          isReinforcement: true
+        });
+        used.add(wp[i].id);
+      }
+    }
+  }
+  const gen = shuffle(avail.filter(q => !used.has(q.id)));
+  const byF = {};
+  for (const q of gen) {
+    if (!byF[q.formatId]) byF[q.formatId] = [];
+    byF[q.formatId].push(q);
+  }
+  const fids = shuffle(Object.keys(byF));
+  let idx = 0;
+  while (qs.length < count && idx < count * 5) {
+    const fid = fids[idx % fids.length];
+    const fq = byF[fid];
+    if (fq && fq.length > 0) {
+      const q = fq.shift();
+      if (!used.has(q.id)) {
+        qs.push(q);
+        used.add(q.id);
+      }
+    }
+    idx++;
+  }
+  const final = shuffle(qs).slice(0, count);
+  final.forEach((q, i) => {
+    q.index = i + 1;
+  });
+  return final;
+}
+
+// ━━━━━━━━━━━━━━━━━
+//  SHARED UI
+// ━━━━━━━━━━━━━━━━━
+const C = {
+  purple: "#6366f1",
+  purpleDark: "#3730a3",
+  green: "#10b981",
+  greenDark: "#059669",
+  amber: "#f59e0b",
+  red: "#ef4444",
+  gray: "#6b7280"
+};
+const card = {
+  background: "#fff",
+  borderRadius: 24,
+  padding: "28px 24px",
+  maxWidth: 520,
+  width: "100%",
+  boxShadow: "0 8px 32px rgba(0,0,0,.08)"
+};
+function NumberLine({
+  center,
+  answer,
+  showAnswer
+}) {
+  const start = Math.max(0, center - 3);
+  const nums = Array.from({
+    length: 7
+  }, (_, i) => start + i);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      margin: "16px 0 8px",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      background: "#f0f4ff",
+      borderRadius: 16,
+      padding: "8px 4px",
+      border: "2px solid #d0d8f0",
+      overflowX: "auto"
+    }
+  }, nums.map((n, i) => {
+    const isC = n === center,
+      isA = n === answer,
+      show = isA && showAnswer;
+    let bg = "#fff",
+      bd = "2px solid #c8d0e0",
+      col = "#4a5568",
+      fw = 500,
+      sc = 1;
+    if (isC) {
+      bg = C.purple;
+      bd = "2px solid #4f46e5";
+      col = "#fff";
+      fw = 700;
+      sc = 1.1;
+    }
+    if (show) {
+      bg = C.green;
+      bd = "2px solid #059669";
+      col = "#fff";
+      fw = 700;
+      sc = 1.15;
+    }
+    return /*#__PURE__*/React.createElement("div", {
+      key: n,
+      style: {
+        display: "flex",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 17,
+        fontWeight: fw,
+        background: bg,
+        border: bd,
+        color: col,
+        transform: `scale(${sc})`,
+        transition: "all .3s",
+        boxShadow: isC || show ? "0 2px 8px rgba(0,0,0,.15)" : "none",
+        flexShrink: 0
+      }
+    }, isA && !showAnswer ? "?" : n), i < nums.length - 1 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 10,
+        height: 2,
+        background: "#c8d0e0",
+        margin: "0 2px",
+        flexShrink: 0
+      }
+    }));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 6,
+      fontSize: 12,
+      color: "#818cf8"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "← before"), /*#__PURE__*/React.createElement("span", null, "·"), /*#__PURE__*/React.createElement("span", null, "after →")));
+}
+function PBar({
+  label,
+  value,
+  total,
+  color
+}) {
+  const pct = total > 0 ? Math.round(value / total * 100) : 0;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: 12,
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600,
+      color: "#4b5563"
+    }
+  }, label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9ca3af"
+    }
+  }, value)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 8,
+      background: "#f0f4ff",
+      borderRadius: 4,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${pct}%`,
+      height: "100%",
+      background: color,
+      borderRadius: 4,
+      transition: "width .4s"
+    }
+  })));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  USER SELECT
+// ━━━━━━━━━━━━━━━━━━━━━
+function UserSelect({
+  onSelect
+}) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [nn, setNn] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    (async () => {
+      try {
+        setUsers(await getUsers());
+      } catch (e) {
+        setErr("Could not connect. Check Firebase is in test mode.");
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  async function add() {
+    const name = nn.trim();
+    if (!name) return;
+    try {
+      const u = await createUser(name);
+      setUsers(p => [...p, u]);
+      setAdding(false);
+      setNn("");
+      onSelect(u);
+    } catch (e) {
+      setErr("Could not create user");
+    }
+  }
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 48
+    }
+  }, "🔢"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.gray,
+      marginTop: 12
+    }
+  }, "Loading..."));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 56,
+      marginBottom: 8
+    }
+  }, "🔢"), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 26,
+      fontWeight: 800,
+      color: C.purpleDark,
+      margin: "0 0 4px"
+    }
+  }, "Number Neighbours"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: C.gray,
+      fontSize: 14,
+      margin: "0 0 8px"
+    }
+  }, "Who's playing today?"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#9ca3af",
+      fontSize: 12,
+      margin: "0 0 24px"
+    }
+  }, POOL.length, " questions · ", FORMATS.length, " formats"), err && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fef2f2",
+      color: "#dc2626",
+      padding: "10px 14px",
+      borderRadius: 12,
+      fontSize: 13,
+      marginBottom: 16
+    }
+  }, err), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      marginBottom: 16
+    }
+  }, users.map(u => /*#__PURE__*/React.createElement("button", {
+    key: u.id,
+    onClick: () => onSelect(u),
+    style: {
+      padding: "14px 18px",
+      background: "#f0f4ff",
+      fontSize: 16,
+      color: C.purpleDark,
+      display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 28
+    }
+  }, u.avatar), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      textAlign: "left"
+    }
+  }, u.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: C.gray,
+      fontWeight: 500
+    }
+  }, u.totalQuizzes || 0, " quizzes")))), adding ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: nn,
+    onChange: e => setNn(e.target.value),
+    onKeyDown: e => e.key === "Enter" && add(),
+    placeholder: "Enter name",
+    maxLength: 20,
+    style: {
+      flex: 1,
+      padding: "12px 14px",
+      borderRadius: 14,
+      border: "2px solid #e0e7ff",
+      fontSize: 16,
+      fontWeight: 600,
+      color: C.purpleDark,
+      outline: "none",
+      fontFamily: "inherit"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: add,
+    style: {
+      padding: "12px 20px",
+      background: C.green,
+      color: "#fff",
+      fontSize: 15
+    }
+  }, "Add"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setAdding(false);
+      setNn("");
+    },
+    style: {
+      padding: "12px 14px",
+      background: "#f3f4f6",
+      color: C.gray,
+      fontSize: 15
+    }
+  }, "✕")) : /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAdding(true),
+    style: {
+      width: "100%",
+      padding: "14px 18px",
+      background: `${C.purple}12`,
+      color: C.purple,
+      fontSize: 15
+    }
+  }, "+ Add Player")));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  DASHBOARD
+// ━━━━━━━━━━━━━━━━━━━━━
+function Dashboard({
+  user,
+  onStartQuiz,
+  onViewErrors,
+  onSwitchUser
+}) {
+  const [stats, setStats] = useState(null);
+  const [ep, setEp] = useState(null);
+  const [recent, setRecent] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [s, e, r] = await Promise.all([getUserStats(user.id), getErrorPatterns(user.id), getRecentQuizzes(user.id, 5)]);
+        setStats(s);
+        setEp(e);
+        setRecent(r);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user.id]);
+  const acc = stats && stats.totalQuestions > 0 ? Math.round(stats.totalCorrect / stats.totalQuestions * 100) : null;
+  let weak = null;
+  if (ep && ep.formatRanking.length > 0) {
+    const t = ep.formatRanking.slice(0, 2).map(f => `"${f.label}" (${f.count}×)`).join(", ");
+    weak = `Weakest areas: ${t}. This quiz will include extra practice.`;
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onSwitchUser,
+    style: {
+      background: "#fff",
+      padding: "8px 14px",
+      fontSize: 13,
+      color: C.purple,
+      boxShadow: "0 2px 8px rgba(0,0,0,.06)"
+    }
+  }, "← Switch"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 24
+    }
+  }, user.avatar), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: C.purpleDark,
+      fontSize: 16
+    }
+  }, user.name))), !loading && stats && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      maxWidth: 520,
+      width: "100%",
+      marginBottom: 16
+    }
+  }, [{
+    l: "Quizzes",
+    v: stats.totalQuizzes || 0,
+    c: C.purple
+  }, {
+    l: "Questions",
+    v: stats.totalQuestions || 0,
+    c: C.green
+  }, {
+    l: "Accuracy",
+    v: acc !== null ? acc + "%" : "—",
+    c: acc >= 80 ? C.green : acc >= 60 ? C.amber : C.red
+  }, {
+    l: "Errors",
+    v: (ep === null || ep === void 0 ? void 0 : ep.total) || 0,
+    c: C.red,
+    click: (ep === null || ep === void 0 ? void 0 : ep.total) > 0 ? onViewErrors : undefined
+  }].map(({
+    l,
+    v,
+    c,
+    click
+  }, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    onClick: click,
+    style: {
+      flex: 1,
+      background: "#fff",
+      borderRadius: 14,
+      padding: "12px 8px",
+      textAlign: "center",
+      boxShadow: "0 2px 8px rgba(0,0,0,.05)",
+      cursor: click ? "pointer" : "default"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 800,
+      color: c
+    }
+  }, v), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.gray,
+      fontWeight: 600,
+      marginTop: 2
+    }
+  }, l)))), weak && /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 520,
+      width: "100%",
+      background: "#fef3c7",
+      border: "2px solid #fcd34d",
+      borderRadius: 14,
+      padding: "12px 16px",
+      marginBottom: 16,
+      fontSize: 13,
+      lineHeight: 1.5,
+      color: "#92400e"
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "Practice tip:"), " ", weak), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: C.purpleDark,
+      margin: "0 0 6px"
+    }
+  }, "Start a Quiz"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: C.gray,
+      margin: "0 0 16px"
+    }
+  }, (ep === null || ep === void 0 ? void 0 : ep.total) > 0 ? "40% of questions will target your weak formats." : "Pick your quiz settings."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "auto 1fr 1fr 1fr",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", null), [10, 20, 30].map(n => /*#__PURE__*/React.createElement("div", {
+    key: n,
+    style: {
+      textAlign: "center",
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.gray
+    }
+  }, n, " Qs")), [{
+    d: "easy",
+    l: "Easy",
+    s: "1–20, standard",
+    c: C.green
+  }, {
+    d: "medium",
+    l: "Medium",
+    s: "1–50, + tricky",
+    c: C.amber
+  }, {
+    d: "hard",
+    l: "Hard",
+    s: "1–100, all types",
+    c: C.red
+  }].map(({
+    d,
+    l,
+    s,
+    c
+  }) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: d
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      paddingRight: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      color: c
+    }
+  }, l), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.gray
+    }
+  }, s)), [10, 20, 30].map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
+    onClick: () => onStartQuiz(n, d),
+    style: {
+      padding: "12px 6px",
+      background: `${c}12`,
+      textAlign: "center",
+      fontSize: 14,
+      color: c
+    }
+  }, n)))))), recent.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: card
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: C.purpleDark,
+      margin: "0 0 12px"
+    }
+  }, "Recent Quizzes"), recent.map((q, i) => {
+    const pct = Math.round(q.correct / q.total * 100);
+    const dt = q.timestamp ? new Date(q.timestamp).toLocaleDateString() : "";
+    return /*#__PURE__*/React.createElement("div", {
+      key: q.id || i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 0",
+        borderBottom: i < recent.length - 1 ? "1px solid #f0f4ff" : "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: pct >= 80 ? "#ecfdf5" : pct >= 60 ? "#fef3c7" : "#fef2f2",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 14,
+        fontWeight: 700,
+        color: pct >= 80 ? C.greenDark : pct >= 60 ? "#b45309" : "#dc2626"
+      }
+    }, pct, "%"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 600,
+        color: "#1e1b4b"
+      }
+    }, q.correct, "/", q.total, " correct"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.gray
+      }
+    }, q.difficulty, " · ", dt)));
+  })));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  QUIZ
+// ━━━━━━━━━━━━━━━━━━━━━
+function Quiz({
+  questions,
+  onFinish
+}) {
+  const [cur, setCur] = useState(0);
+  const [input, setInput] = useState("");
+  const [fb, setFb] = useState(null);
+  const [hint, setHint] = useState(false);
+  const [results, setResults] = useState([]);
+  const [streak, setStreak] = useState(0);
+  const ref = useRef(null);
+  const q = questions[cur],
+    total = questions.length,
+    ok = results.filter(r => r.correct).length,
+    prog = (cur + (fb ? 1 : 0)) / total * 100;
+  useEffect(() => {
+    if (!fb) setTimeout(() => {
+      var _ref$current;
+      return (_ref$current = ref.current) === null || _ref$current === void 0 ? void 0 : _ref$current.focus();
+    }, 80);
+  }, [cur, fb]);
+  function submit() {
+    if (!input.trim()) return;
+    const ans = parseInt(input, 10);
+    if (isNaN(ans)) return;
+    const correct = ans === q.answer;
+    setResults(p => [...p, {
+      correct,
+      userAnswer: ans,
+      correctAnswer: q.answer,
+      givenNumber: q.givenNumber,
+      direction: q.direction,
+      questionType: q.questionType,
+      questionText: q.text,
+      formatId: q.formatId,
+      formatLabel: q.formatLabel,
+      range: q.range
+    }]);
+    if (correct) {
+      setStreak(s => s + 1);
+      setFb({
+        correct: true,
+        msg: streak >= 2 ? `🔥 ${streak + 1} in a row!` : "That's right!"
+      });
+    } else {
+      setStreak(0);
+      setFb({
+        correct: false,
+        msg: q.explanation
+      });
+    }
+  }
+  function next() {
+    if (cur + 1 >= total) {
+      onFinish(results);
+      return;
+    }
+    setCur(c => c + 1);
+    setInput("");
+    setFb(null);
+    setHint(false);
+  }
+  function onKey(e) {
+    if (e.key === "Enter") {
+      fb ? next() : submit();
+    }
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: C.gray
+    }
+  }, "Question ", cur + 1, " of ", total), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.green
+    }
+  }, "✓ ", ok)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      height: 8,
+      background: "#e0e7ff",
+      borderRadius: 4,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${prog}%`,
+      height: "100%",
+      background: `linear-gradient(90deg,${C.purple},${C.green})`,
+      borderRadius: 4,
+      transition: "width .4s"
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      position: "relative",
+      overflow: "hidden"
+    }
+  }, streak >= 3 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 12,
+      right: 14,
+      background: "#fef3c7",
+      color: "#b45309",
+      fontSize: 12,
+      fontWeight: 700,
+      padding: "3px 8px",
+      borderRadius: 8
+    }
+  }, "🔥 ", streak), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginBottom: 10,
+      flexWrap: "wrap"
+    }
+  }, q.questionType === "reversed" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: "#fef3c7",
+      color: "#b45309",
+      fontSize: 11,
+      fontWeight: 700,
+      padding: "3px 10px",
+      borderRadius: 8
+    }
+  }, "⚡ TRICKY"), q.isReinforcement && /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: "#ede9fe",
+      color: "#6d28d9",
+      fontSize: 11,
+      fontWeight: 700,
+      padding: "3px 10px",
+      borderRadius: 8
+    }
+  }, "🎯 PRACTICE"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: "#f0fdf4",
+      color: C.greenDark,
+      fontSize: 11,
+      fontWeight: 600,
+      padding: "3px 10px",
+      borderRadius: 8
+    }
+  }, q.formatLabel)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 19,
+      fontWeight: 700,
+      color: "#1e1b4b",
+      lineHeight: 1.5,
+      marginBottom: 8
+    }
+  }, q.text), /*#__PURE__*/React.createElement(NumberLine, {
+    center: q.givenNumber,
+    answer: q.answer,
+    showAnswer: fb !== null
+  }), !fb && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setHint(true),
+    style: {
+      background: "none",
+      color: "#818cf8",
+      fontSize: 13,
+      fontWeight: 600,
+      padding: "4px 0",
+      marginBottom: 4
+    }
+  }, hint ? `💡 ${q.hint}` : "Need a hint?"), !fb && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    ref: ref,
+    type: "number",
+    inputMode: "numeric",
+    value: input,
+    onChange: e => setInput(e.target.value),
+    onKeyDown: onKey,
+    placeholder: "?",
+    style: {
+      flex: 1,
+      padding: "14px 16px",
+      borderRadius: 14,
+      border: "2px solid #e0e7ff",
+      fontSize: 22,
+      fontWeight: 700,
+      color: C.purpleDark,
+      outline: "none",
+      textAlign: "center",
+      fontFamily: "inherit"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: submit,
+    style: {
+      padding: "14px 28px",
+      background: C.purple,
+      color: "#fff",
+      fontSize: 18
+    }
+  }, "Go!")), fb && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14,
+      padding: 14,
+      borderRadius: 14,
+      background: fb.correct ? "#ecfdf5" : "#fef2f2",
+      border: `2px solid ${fb.correct ? "#6ee7b7" : "#fca5a5"}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 700,
+      color: fb.correct ? C.greenDark : "#dc2626",
+      marginBottom: 3
+    }
+  }, fb.correct ? "✅ Correct!" : `✗ The answer is ${q.answer}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#4b5563",
+      lineHeight: 1.5
+    }
+  }, fb.msg), /*#__PURE__*/React.createElement("button", {
+    onClick: next,
+    style: {
+      marginTop: 10,
+      padding: "11px 24px",
+      background: fb.correct ? C.green : C.purple,
+      color: "#fff",
+      fontSize: 15
+    }
+  }, cur + 1 >= total ? "See Results →" : "Next →"))));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  RESULTS
+// ━━━━━━━━━━━━━━━━━━━━━
+function Results({
+  results,
+  onHome,
+  onRetry
+}) {
+  const total = results.length,
+    correct = results.filter(r => r.correct).length,
+    errors = results.filter(r => !r.correct),
+    pct = Math.round(correct / total * 100);
+  let emoji, title, sub;
+  if (pct >= 90) {
+    emoji = "🏆";
+    title = "Amazing!";
+    sub = "Almost perfect!";
+  } else if (pct >= 70) {
+    emoji = "🌟";
+    title = "Great job!";
+    sub = "Keep it up!";
+  } else if (pct >= 50) {
+    emoji = "💪";
+    title = "Good try!";
+    sub = "Practice makes perfect.";
+  } else {
+    emoji = "📚";
+    title = "Keep practising!";
+    sub = "You'll get better each time.";
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      textAlign: "center",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 64,
+      marginBottom: 4
+    }
+  }, emoji), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 26,
+      fontWeight: 800,
+      color: C.purpleDark,
+      margin: "0 0 4px"
+    }
+  }, title), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      color: C.gray,
+      margin: "0 0 20px"
+    }
+  }, sub), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      justifyContent: "center",
+      marginBottom: 20
+    }
+  }, [{
+    v: `${correct}/${total}`,
+    l: "Correct",
+    c: C.green
+  }, {
+    v: `${pct}%`,
+    l: "Accuracy",
+    c: pct >= 70 ? C.green : C.amber
+  }, {
+    v: errors.length,
+    l: "Errors",
+    c: errors.length === 0 ? C.green : C.red
+  }].map(({
+    v,
+    l,
+    c
+  }, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      background: `${c}15`,
+      border: `3px solid ${c}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 18,
+      fontWeight: 800,
+      color: c
+    }
+  }, v), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.gray,
+      fontWeight: 600,
+      marginTop: 4
+    }
+  }, l)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onHome,
+    style: {
+      flex: 1,
+      padding: "13px 16px",
+      background: "#f0f4ff",
+      color: C.purple,
+      fontSize: 15
+    }
+  }, "Home"), /*#__PURE__*/React.createElement("button", {
+    onClick: onRetry,
+    style: {
+      flex: 1,
+      padding: "13px 16px",
+      background: C.purple,
+      color: "#fff",
+      fontSize: 15
+    }
+  }, "Play Again"))), errors.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: card
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: C.purpleDark,
+      margin: "0 0 12px"
+    }
+  }, "Questions to Review (", errors.length, ")"), errors.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      padding: "12px 0",
+      borderBottom: i < errors.length - 1 ? "1px solid #f0f4ff" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600,
+      color: "#1e1b4b",
+      marginBottom: 4
+    }
+  }, e.questionText), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: C.gray
+    }
+  }, "Your answer: ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#dc2626",
+      fontWeight: 700
+    }
+  }, e.userAnswer), " · Correct: ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.greenDark,
+      fontWeight: 700
+    }
+  }, e.correctAnswer)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 4,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      background: "#f0f4ff",
+      color: C.purple,
+      padding: "2px 8px",
+      borderRadius: 6,
+      fontWeight: 600
+    }
+  }, e.formatLabel), e.questionType === "reversed" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      background: "#fef3c7",
+      color: "#b45309",
+      padding: "2px 8px",
+      borderRadius: 6,
+      fontWeight: 600
+    }
+  }, "⚡ tricky"))))));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  ERROR LOG
+// ━━━━━━━━━━━━━━━━━━━━━
+function ErrorLog({
+  user,
+  onBack
+}) {
+  const [errors, setErrors] = useState([]);
+  const [pat, setPat] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [a, p] = await Promise.all([getAllErrors(user.id), getErrorPatterns(user.id)]);
+        setErrors(a);
+        setPat(p);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user.id]);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.gray
+    }
+  }, "Loading..."));
+  if (!errors.length) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 48,
+      marginBottom: 8
+    }
+  }, "🎉"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 20,
+      color: C.purpleDark,
+      margin: "0 0 8px"
+    }
+  }, "No errors yet!"), /*#__PURE__*/React.createElement("button", {
+    onClick: onBack,
+    style: {
+      padding: "12px 24px",
+      background: C.purple,
+      color: "#fff",
+      fontSize: 15
+    }
+  }, "Back")));
+  const grouped = {};
+  for (const e of errors) {
+    const k = `${e.formatId || "x"}|${e.givenNumber}`;
+    if (!grouped[k]) grouped[k] = {
+      ...e,
+      count: 0
+    };
+    grouped[k].count++;
+  }
+  const top = Object.values(grouped).sort((a, b) => b.count - a.count).slice(0, 10);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onBack,
+    style: {
+      background: "#fff",
+      padding: "8px 14px",
+      fontSize: 13,
+      color: C.purple,
+      boxShadow: "0 2px 8px rgba(0,0,0,.06)"
+    }
+  }, "← Back"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: C.purpleDark,
+      fontSize: 16
+    }
+  }, user.avatar, " ", user.name, "'s Errors")), pat && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: C.purpleDark,
+      margin: "0 0 14px"
+    }
+  }, "Error Patterns (", pat.total, " total)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(PBar, {
+    label: "Before",
+    value: pat.byDirection.before,
+    total: pat.total,
+    color: "#818cf8"
+  }), /*#__PURE__*/React.createElement(PBar, {
+    label: "After",
+    value: pat.byDirection.after,
+    total: pat.total,
+    color: "#34d399"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(PBar, {
+    label: "Standard",
+    value: pat.byType.standard,
+    total: pat.total,
+    color: "#60a5fa"
+  }), /*#__PURE__*/React.createElement(PBar, {
+    label: "Tricky",
+    value: pat.byType.reversed,
+    total: pat.total,
+    color: "#f59e0b"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(PBar, {
+    label: "1–20",
+    value: pat.byRange.easy,
+    total: pat.total,
+    color: C.green
+  }), /*#__PURE__*/React.createElement(PBar, {
+    label: "21–50",
+    value: pat.byRange.medium,
+    total: pat.total,
+    color: C.amber
+  }), /*#__PURE__*/React.createElement(PBar, {
+    label: "51–100",
+    value: pat.byRange.hard,
+    total: pat.total,
+    color: C.red
+  })), pat.formatRanking.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.gray,
+      marginBottom: 8
+    }
+  }, "By Question Format"), pat.formatRanking.map((f, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 28,
+      height: 28,
+      borderRadius: 7,
+      background: "#fef2f2",
+      color: "#dc2626",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 12,
+      fontWeight: 700
+    }
+  }, f.count), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#4b5563"
+    }
+  }, f.label))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: C.purpleDark,
+      margin: "0 0 4px"
+    }
+  }, "Most Repeated Mistakes"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: C.gray,
+      margin: "0 0 14px"
+    }
+  }, "These formats appear more in future quizzes."), top.map((m, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 0",
+      borderBottom: i < top.length - 1 ? "1px solid #f0f4ff" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      background: "#fef2f2",
+      color: "#dc2626",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 13,
+      fontWeight: 700,
+      flexShrink: 0
+    }
+  }, "×", m.count), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: "#1e1b4b"
+    }
+  }, m.questionText || `${m.direction} ${m.givenNumber}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.gray
+    }
+  }, "Answered ", m.userAnswer, ", correct was ", m.correctAnswer, m.formatLabel && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 4,
+      color: "#9ca3af"
+    }
+  }, "· ", m.formatLabel)))))), /*#__PURE__*/React.createElement("div", {
+    style: card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: C.purpleDark,
+      margin: 0
+    }
+  }, "All Errors"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowAll(!showAll),
+    style: {
+      padding: "6px 12px",
+      background: "#f0f4ff",
+      color: C.purple,
+      fontSize: 12
+    }
+  }, showAll ? "Collapse" : `Show all ${errors.length}`)), showAll ? errors.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: e.id || i,
+    style: {
+      padding: "8px 0",
+      fontSize: 13,
+      borderBottom: i < errors.length - 1 ? "1px solid #f8f9fa" : "none",
+      color: "#4b5563",
+      lineHeight: 1.5
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#1e1b4b",
+      fontWeight: 600
+    }
+  }, e.questionText || `${e.direction} ${e.givenNumber}`), /*#__PURE__*/React.createElement("br", null), "Answered ", e.userAnswer, " (correct: ", e.correctAnswer, ")", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9ca3af",
+      marginLeft: 8,
+      fontSize: 11
+    }
+  }, e.timestamp ? new Date(e.timestamp).toLocaleDateString() : "", " · ", e.formatLabel || ""))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: C.gray
+    }
+  }, "Tap \"Show all\" to see every error.")));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━
+//  APP ROUTER
+// ━━━━━━━━━━━━━━━━━━━━━
+function App() {
+  const [screen, setScreen] = useState("userSelect");
+  const [user, setUser] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [config, setConfig] = useState({
+    count: 10,
+    difficulty: "easy"
+  });
+  const [qr, setQr] = useState([]);
+  const [rk, setRk] = useState(0);
+  const sel = useCallback(u => {
+    setUser(u);
+    setScreen("dashboard");
+  }, []);
+  const start = useCallback(async (count, difficulty) => {
+    let p = null;
+    try {
+      p = await getErrorPatterns(user.id);
+    } catch (e) {}
+    setQuestions(generateQuiz(count, difficulty, p));
+    setConfig({
+      count,
+      difficulty
+    });
+    setScreen("quiz");
+  }, [user]);
+  const finish = useCallback(async results => {
+    setQr(results);
+    setScreen("results");
+    try {
+      const errs = results.filter(r => !r.correct);
+      const qid = await saveQuiz(user.id, {
+        total: results.length,
+        correct: results.filter(r => r.correct).length,
+        difficulty: config.difficulty,
+        errorCount: errs.length
+      });
+      if (errs.length > 0) await saveErrors(user.id, qid, errs);
+    } catch (e) {
+      console.error("Save failed:", e);
+    }
+  }, [user, config]);
+  const home = useCallback(() => {
+    setRk(k => k + 1);
+    setScreen("dashboard");
+  }, []);
+  const retry = useCallback(() => start(config.count, config.difficulty), [start, config]);
+  switch (screen) {
+    case "userSelect":
+      return /*#__PURE__*/React.createElement(UserSelect, {
+        onSelect: sel
+      });
+    case "dashboard":
+      return /*#__PURE__*/React.createElement(Dashboard, {
+        key: rk,
+        user: user,
+        onStartQuiz: start,
+        onViewErrors: () => setScreen("errorLog"),
+        onSwitchUser: () => setScreen("userSelect")
+      });
+    case "quiz":
+      return /*#__PURE__*/React.createElement(Quiz, {
+        questions: questions,
+        onFinish: finish
+      });
+    case "results":
+      return /*#__PURE__*/React.createElement(Results, {
+        results: qr,
+        onHome: home,
+        onRetry: retry
+      });
+    case "errorLog":
+      return /*#__PURE__*/React.createElement(ErrorLog, {
+        user: user,
+        onBack: home
+      });
+    default:
+      return /*#__PURE__*/React.createElement(UserSelect, {
+        onSelect: sel
+      });
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));</script></body></html>
